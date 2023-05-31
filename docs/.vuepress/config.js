@@ -14,11 +14,21 @@ module.exports = {
     ],
     sidebar: [
       {
+        title: "Mybatis", // 必要的
+        collapsable: false, // 可选的, 默认值是 true,
+        sidebarDepth: 3, // 可选的, 默认值是 1
+        children: [
+          "/mybatis/jdbc",
+          "/mybatis/mybatis",
+        ],
+      },
+      {
         title: "Spring", // 必要的
         collapsable: false, // 可选的, 默认值是 true,
         sidebarDepth: 2, // 可选的, 默认值是 1
         children: [
-          "/spring/beans"
+          "/spring/beans",
+          "/spring/spring",
         ],
       },
       {
