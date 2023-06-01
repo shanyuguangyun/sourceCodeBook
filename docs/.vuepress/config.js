@@ -16,7 +16,7 @@ module.exports = {
       {
         title: "Mybatis", // 必要的
         collapsable: false, // 可选的, 默认值是 true,
-        sidebarDepth: 3, // 可选的, 默认值是 1
+        sidebarDepth: 2, // 可选的, 默认值是 1
         children: [
           "/mybatis/jdbc",
           "/mybatis/mybatis",

@@ -2,7 +2,7 @@
 
 有了jdbc基础，知道了statement和datasource等接口后。跟着官网的示例。看下myabtis源码是怎么封装的jdbc操作。
 
-### 1.项目搭建
+## 1.项目搭建
 基于之前的项目，我还是使用的hsqldb，然后在maven里加入mybatis依赖。
 ```xml
 <dependency>
@@ -111,16 +111,16 @@ values('2020-01-23 10:30:22', 'user2', 'test2', '17521279832', 'huahua2');
 ![mybatis](./images/mybatis.png)
 
 
-### 2.源码解析
+## 2.源码解析
 
 通过运行上面的例子，已经可以正常获取到查询user了，不用再像jdbc那样一步步获取connenction,然后执行statement,最后获取resultSet进行一个个设置值。
 整个查询和操作直接用Object就可以进行操作。
 
-#### 1.getResouceAsStream
+### 1.getResouceAsStream
 进入第一行代码，发现Resources也是mybatis的一个类，类似spring的resouce接口，也是对资源的一些操作封装，底层无非也是class.getResouceAsStream或者ClassLoader.getResouceAsStream等。而mybatis相当于封装了下，搞了个ClassLoader数组wrapper，循环cl获取inputStream，尽量避免加载资源失败。
 
 
-#### 2.SqlSessionFactoryBuilder
+### 2.SqlSessionFactoryBuilder
 第二行，这个builder提供了多种多样的SqlSessionFactory的build重载，最终还是会落到下面这串代码中(我这里拆出了主体)
 ```java
 public SqlSessionFactory build(InputStream inputStream, String environment, Properties properties) {
@@ -504,3 +504,48 @@ protected static class StrictMap<V> extends HashMap<String, V> {
 ![mybatis2](./images/mybatis2.png)
 ![mybatis3](./images/mybatis3.png)
 ![mybatis4](./images/mybatis4.png)
+
+
+### 4.查询逻辑
+
+上面的流程介绍完，大致的流程总结下
+
+- SqlSessionFactoryBuilder.build
+  - 解析xml总配置
+    - 加载environment等操作
+    - !加载mapper
+      - 将mapper解析并通过MapperRegistry注入到knowMappers的map里，knoMappers是Map<Class<?>, MapperProxyFactory<?>> value是代理工厂
+      - 将mapper内具体select、insert、fetchSize、timeout等xml的定义注入到MappedStatement对象，并将其放入到mappedStatements
+- SqlSessionFactory.openSession
+  - 主要为初始化DefaultSqlSession，new DefaultSqlSession(configuration, executor, autoCommit)
+- sqlSession.getMapper
+  - 从sqlsession内的config获取mapperRegistry然后getMapper
+    - 获取到MapperProxyFactory
+      - 用jdk的动态代理，代理类为MapperProxy
+- 执行mapper.getxxx具体方法
+  - MapperProxy.invoke具体执行
+    - invoke执行时，不是仅仅invoke了方法，而是走内部关联类MapperMethod去执行，而且这个还加了个map缓存Map<Method, MapperMethod> methodCache
+      - MapperMethod构造器初始化了内部的SqlCommand和MethodSignature
+        - SqlCommand根据MappedStatement而来，取其中id和SqlCommandType
+        - MethodSignature由被代理的方法而来，取参数返回类型等，
+    - 由MapperMethod执行具体execute
+      - 判断SqlCommandType,走不同逻辑
+        - 增
+        - 删
+        - 改
+        - 查
+          - 从MethodSignature转换参数
+          - 执行sqlSession.selectXXX(MappedStatement.id, param)
+            - 获取MappedStatement
+            - executor.query(ms、param) 这个executor类型默认被装饰为caching，如果xml配置为false，且openSession时指定则为指定类型
+              - 从ms获取BoundSql，就是具体sql和参数信息
+              - 构建了个CacheKey(暂时看不懂没关系，知道是个缓存就OK)
+              - CacingExecutor又从ms里获取了个Cache，做了一堆操作，然后用具体delegate执行具体query
+                - 具体baseExecutor查询又从localCache获取，然后没有从db查询
+                  - 先塞localCache占位，再掉具体query，又回到了SimpleExecutor.query
+                    - 获取StatementHandler(又是一个重要接口),prepareStatement获取connection，设置connection，如timeOut,fetchSize等，这里返回的是RoutingStatementHandler,然后内部根据类型委托给具体实现，对应statement、preparedStatment、callablestatemnt
+                    - StatementHandler执行具体query
+                    - resultSetHandler.handleResultSets解析ResultSet
+                  - 移除localCache，将结果塞入localCache
+
+看完这些，不得不感慨，这些框架源码确实太复杂了，mybatis还是相对简单的框架。所以跟源码这种事一个是费时费力，要耐心耗费大量时间跟进。但是能学到的东西还是很多的，优秀的开源框架代码主体真的写的太好了，还能学到旁支技术。但是说实话，跟源码要一定的技术积累。而且也要适合自己的框架，同时可能还要借鉴几本书同时加深理解。
